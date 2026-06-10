@@ -1,10 +1,11 @@
 /* 环境百词斩 service worker — 离线缓存 */
-var CACHE = "hj-cache-v4";
+var CACHE = "hj-cache-v5";
 var ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./config.js",
+  "./codes.js",
   "./app.js",
   "./manifest.json",
   "./icons/icon.svg",

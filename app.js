@@ -483,7 +483,7 @@
 
   // ---------- 后端接口 (Google Apps Script, 用 GET 避开 CORS) ----------
   function apiUrl() { return (window.HJ_CONFIG && window.HJ_CONFIG.apiUrl) || ""; }
-  function apiCall(action, payload) {
+  function apiCall(action, payload, timeoutMs) {
     var url = apiUrl();
     if (!url) return Promise.reject(new Error("backend-not-configured"));
     var body = { action: action };
@@ -492,7 +492,34 @@
       "action=" + encodeURIComponent(action) +
       "&data=" + encodeURIComponent(JSON.stringify(body)) +
       "&t=" + Date.now();
-    return fetch(full, { method: "GET", cache: "no-store" }).then(function (r) { return r.json(); });
+    var opts = { method: "GET", cache: "no-store" };
+    var timer = null;
+    if (window.AbortController) {
+      var ctrl = new AbortController();
+      opts.signal = ctrl.signal;
+      timer = setTimeout(function () { ctrl.abort(); }, timeoutMs || 8000);
+    }
+    return fetch(full, opts).then(
+      function (r) { if (timer) clearTimeout(timer); return r.json(); },
+      function (e) { if (timer) clearTimeout(timer); throw e; }
+    );
+  }
+
+  // 墙内离线校验：用加盐 SHA-256 比对本地哈希(codes.js)
+  function sha256Hex(str) {
+    var enc = new TextEncoder().encode(str);
+    if (window.crypto && window.crypto.subtle) {
+      return window.crypto.subtle.digest("SHA-256", enc).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+          return ("0" + b.toString(16)).slice(-2);
+        }).join("");
+      });
+    }
+    return Promise.reject(new Error("nocrypto"));
+  }
+  function validateLocal(code) {
+    var c = window.HJ_CODES || { salt: "", hashes: [] };
+    return sha256Hex(c.salt + ":" + code).then(function (h) { return c.hashes.indexOf(h) >= 0; });
   }
 
   // ---------- 设备登录态 ----------
@@ -524,7 +551,7 @@
   var lastSync = 0;
   function syncNow(force) {
     var dev = getDevice();
-    if (!dev || !apiUrl()) return;
+    if (!dev || dev.local || !apiUrl()) return; // 本地(墙内)设备不联网同步
     if (!force && Date.now() - lastSync < 20000) return; // 限频 20s
     lastSync = Date.now();
     apiCall("sync", { deviceId: dev.deviceId, book: state.book, stats: computeStats(), ua: navigator.userAgent })
@@ -553,21 +580,23 @@
       if (!name) { err.textContent = "请给这台设备起个名字"; return; }
       err.textContent = "";
       btn.disabled = true; btn.textContent = "登录中…";
-      apiCall("register", { code: code, name: name, ua: navigator.userAgent }).then(function (res) {
-        btn.disabled = false; btn.textContent = "登录";
-        if (res && res.ok) {
-          setDevice({ deviceId: res.deviceId, name: res.name });
-          gate.classList.add("hidden");
-          startApp();
-        } else {
-          err.textContent = (res && res.error) || "登录失败，请重试";
-          codeI.select();
-        }
-      }).catch(function (e) {
-        btn.disabled = false; btn.textContent = "登录";
-        err.textContent = e.message === "backend-not-configured"
-          ? "后台尚未配置（config.js 的 apiUrl 为空）"
-          : "网络错误，请检查网络后重试";
+
+      function fail(msg) { btn.disabled = false; btn.textContent = "登录"; err.textContent = msg; codeI.select(); }
+      function enter(dev) { setDevice(dev); btn.disabled = false; btn.textContent = "登录"; gate.classList.add("hidden"); startApp(); }
+      // 墙内兜底：后端连不上时，用本地哈希校验放行（不联网、不可远程管理）
+      function fallbackLocal() {
+        validateLocal(code).then(function (okLocal) {
+          if (okLocal) enter({ deviceId: "local-" + Date.now() + "-" + Math.floor(Math.random() * 1e6), name: name, local: true });
+          else fail("激活码无效，请检查后重试");
+        }).catch(function () { fail("此浏览器太旧，无法验证，请更新浏览器后重试"); });
+      }
+
+      // 先试在线后端（能连上谷歌→全功能管理）；连不上/超时→走本地兜底
+      apiCall("register", { code: code, name: name, ua: navigator.userAgent }, 8000).then(function (res) {
+        if (res && res.ok) enter({ deviceId: res.deviceId, name: res.name });
+        else fail((res && res.error) || "登录失败，请重试"); // 后端可达且明确拒绝(如码无效)
+      }).catch(function () {
+        fallbackLocal(); // 后端不可达(被墙/超时/未配置)
       });
     }
     btn.onclick = attempt;
