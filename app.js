@@ -414,6 +414,14 @@
     var holder = $("quizSpeakHolder");
     if (holder) holder.innerHTML = speakBtnHtml(qz.cur);
     if (autoOn()) TTS.speak(sayOf(qz.cur));
+    // 揭晓后允许对正确单词报错
+    if (!$("quizPrompt").querySelector(".fb-report")) {
+      var rb = document.createElement("button");
+      rb.className = "fb-report";
+      rb.setAttribute("data-fb", qz.cur.word);
+      rb.textContent = "🚩 这题有误？报错";
+      $("quizPrompt").appendChild(rb);
+    }
   }
   function quizNext() {
     qz.i++;
@@ -601,7 +609,7 @@
       if (b) quizAnswer(b);
     };
     $("quizNext").onclick = quizNext;
-    $("quizPrompt").onclick = handleSpeakClick;  // 题目区的🔊
+    $("quizPrompt").onclick = function (e) { if (!handleSpeakClick(e)) handleFbClick(e); };  // 题目区🔊/报错
 
     // 浏览
     $("searchInput").oninput = function () { renderBrowse(this.value); };
