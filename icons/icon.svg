@@ -1,6 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#1f8a5b"/>
-  <path d="M256 96c-66 60-104 104-104 156a104 104 0 0 0 208 0c0-52-38-96-104-156z" fill="#7fe3a8"/>
-  <path d="M256 150c-44 42-70 72-70 104a70 70 0 0 0 140 0c0-32-26-62-70-104z" fill="#ffffff" opacity="0.92"/>
-  <text x="256" y="392" font-family="-apple-system,Segoe UI,Microsoft YaHei,sans-serif" font-size="120" font-weight="800" fill="#ffffff" text-anchor="middle">境</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3dcb7e"/>
+      <stop offset="1" stop-color="#107344"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dff5e9"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+  <g transform="rotate(26 256 256)">
+    <path d="M256 77 Q374 256 256 435 Q138 256 256 77 Z" fill="url(#leaf)"/>
+    <g fill="none" stroke="#1f8a5b" stroke-width="7" stroke-linecap="round" opacity="0.92">
+      <path d="M256 100 L256 412"/>
+      <path d="M256 250 L182 196"/>
+      <path d="M256 250 L330 196"/>
+      <path d="M256 320 L186 270"/>
+      <path d="M256 320 L326 270"/>
+      <path d="M256 182 L196 142"/>
+      <path d="M256 182 L316 142"/>
+    </g>
+  </g>
 </svg>
