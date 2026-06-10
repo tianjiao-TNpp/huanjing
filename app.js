@@ -47,6 +47,7 @@
     s.last = Date.now();
     bs[word] = s;
     saveStore(store);
+    bumpActions();
     return s;
   }
 
@@ -139,6 +140,19 @@
       : (d.fresh > 0 ? d.fresh + " 个新词待学" : "全部已复习 🎉");
     renderFilter();
     updateBookBtn();
+    renderDeviceFoot();
+  }
+  function renderDeviceFoot() {
+    var el = $("deviceFoot");
+    if (!el) return;
+    var dev = getDevice();
+    if (!dev) { el.innerHTML = ""; return; }
+    el.innerHTML = '当前设备：<b>' + esc(dev.name) + '</b> · <a href="#" id="logoutLink">退出登录</a>';
+    var lk = $("logoutLink");
+    if (lk) lk.onclick = function (e) {
+      e.preventDefault();
+      if (confirm("退出后下次需要重新输入激活码和设备名字，确定退出？")) forceLogout("已退出登录");
+    };
   }
   function stat(n, label) {
     return '<div class="stat"><b>' + n + "</b><span>" + label + "</span></div>";
@@ -354,6 +368,7 @@
 
   // ---------- 结算弹层 ----------
   function showResult(r) {
+    syncNow(true); // 一组学完, 上报进度
     var stats = r.stats.map(function (s) {
       return '<div class="stat"><b>' + s[1] + "</b><span>" + s[0] + "</span></div>";
     }).join("");
@@ -466,61 +481,111 @@
     });
   }
 
-  // ---------- 激活码门禁 ----------
-  var GRANT_KEY = "hj_access_v1";
-  function sha256Hex(str) {
-    var enc = new TextEncoder().encode(str);
-    if (window.crypto && window.crypto.subtle) {
-      return window.crypto.subtle.digest("SHA-256", enc).then(function (buf) {
-        return Array.prototype.map.call(new Uint8Array(buf), function (b) {
-          return ("0" + b.toString(16)).slice(-2);
-        }).join("");
-      });
-    }
-    return Promise.reject(new Error("nocrypto"));
+  // ---------- 后端接口 (Google Apps Script, 用 GET 避开 CORS) ----------
+  function apiUrl() { return (window.HJ_CONFIG && window.HJ_CONFIG.apiUrl) || ""; }
+  function apiCall(action, payload) {
+    var url = apiUrl();
+    if (!url) return Promise.reject(new Error("backend-not-configured"));
+    var body = { action: action };
+    for (var k in (payload || {})) body[k] = payload[k];
+    var full = url + (url.indexOf("?") >= 0 ? "&" : "?") +
+      "action=" + encodeURIComponent(action) +
+      "&data=" + encodeURIComponent(JSON.stringify(body)) +
+      "&t=" + Date.now();
+    return fetch(full, { method: "GET", cache: "no-store" }).then(function (r) { return r.json(); });
   }
-  function accessConfig() { return window.HJ_ACCESS || { enabled: false, codes: [] }; }
-  function hashesOf() { return accessConfig().codes.map(function (c) { return c.hash; }); }
 
-  function checkAccess() {
-    var cfg = accessConfig();
-    if (!cfg.enabled) return Promise.resolve(true);
-    // 已激活且该哈希仍在有效列表里
-    var saved = localStorage.getItem(GRANT_KEY);
-    if (saved && hashesOf().indexOf(saved) >= 0) return Promise.resolve(true);
-    if (saved) localStorage.removeItem(GRANT_KEY); // 已被吊销
-    return new Promise(function (resolve) { showGate(resolve, cfg); });
+  // ---------- 设备登录态 ----------
+  var DEVICE_KEY = "hj_device_v1";
+  var ACTIONS_KEY = "hj_actions";
+  function getDevice() {
+    try { return JSON.parse(localStorage.getItem(DEVICE_KEY)); } catch (e) { return null; }
   }
-  function showGate(resolve, cfg) {
-    var gate = $("gate"), input = $("gateInput"), err = $("gateErr"), btn = $("gateBtn");
+  function setDevice(d) { localStorage.setItem(DEVICE_KEY, JSON.stringify(d)); }
+  function bumpActions() {
+    var n = (parseInt(localStorage.getItem(ACTIONS_KEY), 10) || 0) + 1;
+    localStorage.setItem(ACTIONS_KEY, String(n));
+  }
+  function computeStats() {
+    var now = Date.now();
+    function bk(name) {
+      var o = store[name] || {}, learned = 0, mastered = 0, due = 0;
+      for (var w in o) { learned++; if (o[w].reps >= 3) mastered++; if (o[w].due <= now) due++; }
+      return { learned: learned, mastered: mastered, due: due };
+    }
+    var s = bk("simple"), a = bk("advanced");
+    return {
+      s_learned: s.learned, s_mastered: s.mastered,
+      a_learned: a.learned, a_mastered: a.mastered,
+      due: s.due + a.due,
+      actions: parseInt(localStorage.getItem(ACTIONS_KEY), 10) || 0
+    };
+  }
+  var lastSync = 0;
+  function syncNow(force) {
+    var dev = getDevice();
+    if (!dev || !apiUrl()) return;
+    if (!force && Date.now() - lastSync < 20000) return; // 限频 20s
+    lastSync = Date.now();
+    apiCall("sync", { deviceId: dev.deviceId, book: state.book, stats: computeStats(), ua: navigator.userAgent })
+      .then(function (res) {
+        if (res && res.status === "revoked") forceLogout("管理员已将此设备登出。");
+        else if (res && res.status === "unknown") forceLogout("此设备已从后台移除，请重新登录。");
+      })
+      .catch(function () { /* 离线: 宽限, 忽略 */ });
+  }
+  function forceLogout(msg) {
+    localStorage.removeItem(DEVICE_KEY);
+    alert(msg || "已登出");
+    location.reload();
+  }
+
+  // ---------- 登录门禁 (激活码 + 设备名字) ----------
+  function showGate() {
+    var gate = $("gate"), codeI = $("gateInput"), nameI = $("gateName"),
+      err = $("gateErr"), btn = $("gateBtn");
     gate.classList.remove("hidden");
-    setTimeout(function () { input.focus(); }, 100);
+    setTimeout(function () { codeI.focus(); }, 100);
     function attempt() {
-      var code = (input.value || "").trim().toUpperCase().replace(/\s/g, "");
+      var code = (codeI.value || "").trim().toUpperCase().replace(/\s/g, "");
+      var name = (nameI.value || "").trim();
       if (!code) { err.textContent = "请输入激活码"; return; }
-      btn.disabled = true; btn.textContent = "验证中…";
-      sha256Hex(cfg.salt + ":" + code).then(function (h) {
-        btn.disabled = false; btn.textContent = "激活";
-        if (hashesOf().indexOf(h) >= 0) {
-          localStorage.setItem(GRANT_KEY, h);
+      if (!name) { err.textContent = "请给这台设备起个名字"; return; }
+      err.textContent = "";
+      btn.disabled = true; btn.textContent = "登录中…";
+      apiCall("register", { code: code, name: name, ua: navigator.userAgent }).then(function (res) {
+        btn.disabled = false; btn.textContent = "登录";
+        if (res && res.ok) {
+          setDevice({ deviceId: res.deviceId, name: res.name });
           gate.classList.add("hidden");
-          resolve(true);
+          startApp();
         } else {
-          err.textContent = "激活码无效，请检查后重试";
-          input.select();
+          err.textContent = (res && res.error) || "登录失败，请重试";
+          codeI.select();
         }
-      }).catch(function () {
-        btn.disabled = false; btn.textContent = "激活";
-        err.textContent = "此浏览器不支持验证，请用 HTTPS 或较新浏览器打开";
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = "登录";
+        err.textContent = e.message === "backend-not-configured"
+          ? "后台尚未配置（config.js 的 apiUrl 为空）"
+          : "网络错误，请检查网络后重试";
       });
     }
     btn.onclick = attempt;
-    input.onkeydown = function (e) { if (e.key === "Enter") attempt(); };
+    nameI.onkeydown = function (e) { if (e.key === "Enter") attempt(); };
+    codeI.onkeydown = function (e) { if (e.key === "Enter") nameI.focus(); };
   }
 
   // ---------- 启动 ----------
   function boot() {
-    checkAccess().then(startApp);
+    if (getDevice()) {
+      startApp();
+      syncNow(true); // 后台校验是否被登出
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) syncNow(false);
+      });
+    } else {
+      showGate();
+    }
   }
   function startApp() {
     Promise.all([loadScript("data/meta.js"), loadScript("data/directions.js")])

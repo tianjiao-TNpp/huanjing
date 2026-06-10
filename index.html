@@ -16,12 +16,14 @@
     <div class="gate-card">
       <div class="gate-logo">🌿</div>
       <h2>环境百词斩</h2>
-      <p class="gate-tip">请输入激活码以开始使用</p>
+      <p class="gate-tip">输入激活码并给这台设备起个名字</p>
       <input id="gateInput" class="gate-input" type="text" autocomplete="off"
-        autocapitalize="characters" placeholder="例如 ABCD-1234" />
+        autocapitalize="characters" placeholder="激活码，例如 ABCD-1234" />
+      <input id="gateName" class="gate-input gate-input2" type="text" autocomplete="off"
+        maxlength="40" placeholder="设备名字，例如 小明的iPhone" />
       <div id="gateErr" class="gate-err"></div>
-      <button id="gateBtn" class="big-btn good wide">激活</button>
-      <p class="gate-foot">激活后本设备将记住你，无需重复输入。<br>没有激活码？请联系作者获取。</p>
+      <button id="gateBtn" class="big-btn good wide">登录</button>
+      <p class="gate-foot">登录后本设备将记住你，无需重复输入。<br>没有激活码？请联系作者获取。</p>
     </div>
   </div>
 
@@ -71,6 +73,8 @@
         <div id="chipList" class="chip-list"></div>
         <div class="filter-summary" id="filterSummary"></div>
       </section>
+
+      <div class="device-foot" id="deviceFoot"></div>
     </main>
 
     <!-- 闪卡 -->
@@ -122,7 +126,7 @@
     </div>
   </div>
 
-  <script src="access.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

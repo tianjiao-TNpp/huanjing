@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>环境百词斩 · 管理后台</title>
+  <style>
+    :root { --green:#1f8a5b; --bad:#e2563f; --warn:#e8a32a; --line:#e2e8e4; --sub:#6b7872; --bg:#f3f5f4; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:#1b1f1d; }
+    header { background:var(--green); color:#fff; padding:16px 20px; display:flex; align-items:center; gap:12px; }
+    header h1 { font-size:18px; margin:0; flex:1; }
+    header button { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4); color:#fff; padding:6px 14px; border-radius:8px; cursor:pointer; }
+    .wrap { max-width:1100px; margin:0 auto; padding:18px; }
+    .login { max-width:380px; margin:60px auto; background:#fff; border-radius:16px; padding:28px; box-shadow:0 6px 24px rgba(0,0,0,.08); text-align:center; }
+    .login h2 { margin:0 0 16px; }
+    input[type=password],input[type=text] { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; font-size:15px; }
+    .btn { background:var(--green); color:#fff; border:none; padding:11px 18px; border-radius:10px; font-size:15px; cursor:pointer; font-weight:600; }
+    .btn:disabled { opacity:.6; }
+    .bar { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
+    .bar .grow { flex:1; }
+    .muted { color:var(--sub); font-size:13px; }
+    .err { color:var(--bad); font-size:13px; min-height:18px; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.06); font-size:13px; }
+    th,td { padding:10px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+    th { background:#eef3f0; font-size:12px; color:var(--sub); }
+    tr:last-child td { border-bottom:none; }
+    .pill { padding:2px 9px; border-radius:10px; font-size:12px; }
+    .pill.active { background:rgba(31,138,91,.15); color:var(--green); }
+    .pill.revoked { background:rgba(226,86,63,.15); color:var(--bad); }
+    .act { border:none; border-radius:7px; padding:5px 10px; font-size:12px; cursor:pointer; margin-right:4px; color:#fff; }
+    .act.logout { background:var(--warn); }
+    .act.restore { background:var(--green); }
+    .act.del { background:var(--bad); }
+    .cards { display:none; }
+    @media (max-width:720px) {
+      table { display:none; }
+      .cards { display:block; }
+      .card { background:#fff; border-radius:12px; padding:14px; margin-bottom:10px; box-shadow:0 3px 12px rgba(0,0,0,.06); }
+      .card h3 { margin:0 0 6px; font-size:16px; }
+      .card .kv { font-size:13px; color:var(--sub); margin:2px 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>环境百词斩 · 管理后台</h1>
+    <button id="logoutAdmin" style="display:none">退出</button>
+  </header>
+
+  <div id="loginView" class="login">
+    <h2>🔐 管理员登录</h2>
+    <input id="secret" type="password" placeholder="管理员密码" />
+    <div id="loginErr" class="err"></div>
+    <button class="btn" id="loginBtn" style="width:100%">进入</button>
+    <p class="muted" style="margin-top:14px">密码在 Apps Script 的 CONFIG.ADMIN_SECRET 里设置</p>
+  </div>
+
+  <div id="panel" class="wrap" style="display:none">
+    <div class="bar">
+      <button class="btn" id="refresh">↻ 刷新</button>
+      <span id="summary" class="muted"></span>
+      <span class="grow"></span>
+      <span id="serverTime" class="muted"></span>
+    </div>
+    <div id="errBox" class="err"></div>
+    <div id="tableBox"></div>
+    <div id="cardsBox" class="cards"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
