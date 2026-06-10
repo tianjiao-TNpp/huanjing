@@ -152,6 +152,8 @@ body {
 .bk-def { font-size: 15px; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .mini-tag { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 2px 9px; font-size: 12px; }
+.mini-tag.tag-link { border-color: var(--green); color: var(--green); cursor: pointer; font-weight: 600; }
+.mini-tag.tag-link:active { background: var(--green); color: #fff; }
 
 .flash-actions, .quiz-q { margin-top: auto; }
 .flash-actions { display: flex; gap: 12px; }

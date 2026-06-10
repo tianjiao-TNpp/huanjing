@@ -317,6 +317,29 @@
     $("flashProgFill").style.width = (fc.i / fc.list.length * 100) + "%";
     if (autoOn()) TTS.speak(sayOf(w));
   }
+  // 当前词库的单词索引(惰性构建), 用于判断相关词是否可跳转
+  function wordIndex() {
+    if (!state._index) state._index = {};
+    var bk = state.book;
+    if (!state._index[bk]) {
+      var m = {};
+      (state.books[bk] || []).forEach(function (w) { if (!(w.word in m)) m[w.word] = w; });
+      state._index[bk] = m;
+    }
+    return state._index[bk];
+  }
+  function findWord(word) { return wordIndex()[word] || null; }
+  function tagHtml(t) {
+    if (findWord(t))
+      return '<span class="mini-tag tag-link" data-link="' + esc(t) + '">' + esc(t) + " ›</span>";
+    return '<span class="mini-tag">' + esc(t) + "</span>";
+  }
+  function handleLinkClick(e) {
+    var b = e.target.closest && e.target.closest(".tag-link");
+    if (b) { e.stopPropagation(); openDetail(b.getAttribute("data-link")); return true; }
+    return false;
+  }
+
   function backFace(w) {
     var h = '<div class="bk-word">' + esc(w.word) + speakBtnHtml(w) + "</div>";
     if (w.reading) h += '<div class="bk-reading">' + esc(w.reading) + "</div>";
@@ -324,10 +347,10 @@
     h += '<div class="bk-section bk-def"><span class="bk-label">释义</span>' + esc(w.definition) + "</div>";
     if (w.related && w.related.length)
       h += '<div class="bk-section"><span class="bk-label">相关词</span><div class="tag-row">' +
-        w.related.map(function (t) { return '<span class="mini-tag">' + esc(t) + "</span>"; }).join("") + "</div></div>";
+        w.related.map(tagHtml).join("") + "</div></div>";
     if (w.confusing && w.confusing.length)
       h += '<div class="bk-section"><span class="bk-label">易混词/近义词</span><div class="tag-row">' +
-        w.confusing.map(function (t) { return '<span class="mini-tag">' + esc(t) + "</span>"; }).join("") + "</div></div>";
+        w.confusing.map(tagHtml).join("") + "</div></div>";
     if (w.notes)
       h += '<div class="bk-section"><span class="bk-label">学习备注</span>' + esc(w.notes) + "</div>";
     h += '<button class="fb-report" data-fb="' + esc(w.word) + '">🚩 报错 / 提建议</button>';
@@ -597,6 +620,7 @@
     $("flashCard").onclick = function (e) {
       if (handleSpeakClick(e)) return;   // 点🔊只发音, 不翻面
       if (handleFbClick(e)) return;      // 点报错不翻面
+      if (handleLinkClick(e)) return;    // 点相关词跳转, 不翻面
       fc.flipped = !fc.flipped;
       $("flashCard").classList.toggle("flipped", fc.flipped);
     };
@@ -618,7 +642,11 @@
       if (r) openDetail(r.dataset.w);
     };
     document.querySelector("#detailSheet .sheet-bg").onclick = closeDetail;
-    $("sheetBody").onclick = function (e) { if (!handleSpeakClick(e)) handleFbClick(e); };  // 详情里🔊/报错
+    $("sheetBody").onclick = function (e) {  // 详情里🔊/报错/相关词跳转
+      if (handleSpeakClick(e)) return;
+      if (handleLinkClick(e)) return;
+      handleFbClick(e);
+    };
 
     // 报错/反馈
     $("fbClose").onclick = closeFeedback;
