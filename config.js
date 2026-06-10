@@ -4,5 +4,5 @@
  * 留空则前端无法登录（会提示“后台未配置”）。
  */
 window.HJ_CONFIG = {
-  apiUrl: ""
+  apiUrl: "https://script.google.com/macros/s/AKfycbx0ufEClLyxxotx9eW_Ntayjjzb2G8RVGTJoOtehFbABuGVa0kx5b4qfvQqIMCWVTfYwQ/exec"
 };
