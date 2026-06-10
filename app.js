@@ -1,0 +1,549 @@
+/* 环境百词斩 — 备考闪卡 PWA  (vanilla JS, 无依赖) */
+(function () {
+  "use strict";
+
+  var DAY = 86400000;
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- 全局状态 ----------
+  var state = {
+    book: localStorage.getItem("hj_book") || "simple",
+    meta: null,
+    books: {},          // 已加载的词库数据
+    directions: null,
+    filter: { type: null, value: null },  // {type:'category'|'direction', value:名称}
+    seg: "category",
+    view: "home",
+  };
+
+  // ---------- 进度存储 (SM-2) ----------
+  var STORE_KEY = "hj_progress_v1";
+  function loadStore() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
+  var store = loadStore();
+
+  function bookStore() {
+    if (!store[state.book]) store[state.book] = {};
+    return store[state.book];
+  }
+  function cardState(word) { return bookStore()[word] || null; }
+
+  function srsUpdate(word, quality) {
+    var bs = bookStore();
+    var s = bs[word] || { reps: 0, interval: 0, ef: 2.5, due: 0, last: 0 };
+    if (quality < 3) {
+      s.reps = 0; s.interval = 1;
+    } else {
+      s.reps += 1;
+      if (s.reps === 1) s.interval = 1;
+      else if (s.reps === 2) s.interval = 3;
+      else s.interval = Math.round(s.interval * s.ef);
+      s.ef = Math.max(1.3, s.ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
+    }
+    s.due = Date.now() + s.interval * DAY;
+    s.last = Date.now();
+    bs[word] = s;
+    saveStore(store);
+    return s;
+  }
+
+  // ---------- 数据加载 (动态 <script>, 兼容 file://) ----------
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var sc = document.createElement("script");
+      sc.src = src;
+      sc.onload = res;
+      sc.onerror = function () { rej(new Error("加载失败: " + src)); };
+      document.head.appendChild(sc);
+    });
+  }
+  function ensureBook(book) {
+    if (state.books[book]) return Promise.resolve(state.books[book]);
+    return loadScript("data/" + book + ".js").then(function () {
+      state.books[book] = window.__HJ__[book];
+      return state.books[book];
+    });
+  }
+
+  // ---------- 筛选后的词表 ----------
+  function currentList() {
+    var all = state.books[state.book] || [];
+    var f = state.filter;
+    if (!f.type) return all;
+    if (f.type === "category") {
+      return all.filter(function (w) { return w.category === f.value; });
+    }
+    if (f.type === "direction") {
+      var dir = (state.directions || []).find(function (d) { return d.name === f.value; });
+      if (!dir) return all;
+      var set = {};
+      dir.words.forEach(function (w) { set[w] = 1; });
+      return all.filter(function (w) { return set[w.word]; });
+    }
+    return all;
+  }
+
+  // ---------- 工具 ----------
+  function shuffle(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function esc(s) {
+    return (s || "").replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+  function truncate(s, n) { s = s || ""; return s.length > n ? s.slice(0, n) + "…" : s; }
+
+  // ---------- 视图切换 ----------
+  function show(view) {
+    state.view = view;
+    ["home", "flash", "quiz", "browse"].forEach(function (v) {
+      $("view-" + v).classList.toggle("hidden", v !== view);
+    });
+    $("backBtn").classList.toggle("hidden", view === "home");
+    var titles = { home: "环境百词斩", flash: "闪卡翻面", quiz: "选择题测验", browse: "浏览词表" };
+    $("title").textContent = titles[view] || "环境百词斩";
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- 主页 ----------
+  function dueInfo() {
+    var list = currentList(), now = Date.now();
+    var learned = 0, due = 0, mastered = 0, fresh = 0;
+    list.forEach(function (w) {
+      var s = cardState(w.word);
+      if (s) {
+        learned++;
+        if (s.due <= now) due++;
+        if (s.reps >= 3) mastered++;
+      } else fresh++;
+    });
+    return { total: list.length, learned: learned, due: due, mastered: mastered, fresh: fresh };
+  }
+
+  function renderHome() {
+    var d = dueInfo();
+    $("statStrip").innerHTML =
+      stat(d.total, "总词数") + stat(d.learned, "已学") +
+      stat(d.mastered, "已掌握") + stat(d.due, "待复习");
+    $("reviewSub").textContent = d.due > 0
+      ? (d.due + " 个到期 · " + d.fresh + " 个新词")
+      : (d.fresh > 0 ? d.fresh + " 个新词待学" : "全部已复习 🎉");
+    renderFilter();
+    updateBookBtn();
+  }
+  function stat(n, label) {
+    return '<div class="stat"><b>' + n + "</b><span>" + label + "</span></div>";
+  }
+  function updateBookBtn() {
+    $("bookBtn").textContent = state.book === "simple" ? "简易" : "进阶";
+  }
+
+  function renderFilter() {
+    var seg = state.seg;
+    $$(".seg-btn").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.seg === seg);
+    });
+    var chips = [];
+    if (seg === "category") {
+      var cats = state.meta.books[state.book].categories;
+      cats.forEach(function (c) {
+        if (!c.name || c.name === "无可用选项") return;
+        chips.push(chip("category", c.name, c.count));
+      });
+    } else {
+      (state.directions || []).forEach(function (dr) {
+        chips.push(chip("direction", dr.name, dr.words.length));
+      });
+    }
+    $("chipList").innerHTML = chips.join("");
+    var f = state.filter;
+    $("filterSummary").textContent = f.type
+      ? "已选：" + f.value + "（" + currentList().length + " 词）"
+      : "当前学习全部 " + (state.books[state.book] || []).length + " 词";
+  }
+  function chip(type, name, count) {
+    var active = state.filter.type === type && state.filter.value === name;
+    return '<button class="chip' + (active ? " active" : "") + '" data-type="' + type +
+      '" data-value="' + esc(name) + '">' + esc(name) + "<small>" + count + "</small></button>";
+  }
+  function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+
+  // ---------- 闪卡 / 复习 ----------
+  var fc = null;
+  function startFlash(reviewMode) {
+    var list = currentList();
+    if (reviewMode) {
+      var now = Date.now();
+      var due = list.filter(function (w) { var s = cardState(w.word); return s && s.due <= now; });
+      var fresh = list.filter(function (w) { return !cardState(w.word); }).slice(0, 30);
+      list = shuffle(due).concat(shuffle(fresh));
+    } else {
+      list = shuffle(list);
+    }
+    if (!list.length) { alert(reviewMode ? "暂时没有到期或新词可复习 🎉" : "该范围内没有单词"); return; }
+    fc = { list: list, i: 0, flipped: false, known: 0, unknown: 0, review: reviewMode };
+    show("flash");
+    $("title").textContent = reviewMode ? "间隔复习" : "闪卡翻面";
+    renderFlash();
+  }
+  function renderFlash() {
+    var w = fc.list[fc.i];
+    fc.flipped = false;
+    $("flashCard").classList.remove("flipped");
+    $("fcWord").textContent = w.word;
+    $("fcReading").textContent = w.reading || "";
+    $("fcBack").innerHTML = backFace(w);
+    $("flashCounter").textContent = (fc.i + 1) + " / " + fc.list.length;
+    $("flashProgFill").style.width = (fc.i / fc.list.length * 100) + "%";
+  }
+  function backFace(w) {
+    var h = '<div class="bk-word">' + esc(w.word) + "</div>";
+    if (w.reading) h += '<div class="bk-reading">' + esc(w.reading) + "</div>";
+    if (w.category) h += '<span class="bk-cat">' + esc(w.category) + "</span>";
+    h += '<div class="bk-section bk-def"><span class="bk-label">释义</span>' + esc(w.definition) + "</div>";
+    if (w.related && w.related.length)
+      h += '<div class="bk-section"><span class="bk-label">相关词</span><div class="tag-row">' +
+        w.related.map(function (t) { return '<span class="mini-tag">' + esc(t) + "</span>"; }).join("") + "</div></div>";
+    if (w.confusing && w.confusing.length)
+      h += '<div class="bk-section"><span class="bk-label">易混词/近义词</span><div class="tag-row">' +
+        w.confusing.map(function (t) { return '<span class="mini-tag">' + esc(t) + "</span>"; }).join("") + "</div></div>";
+    if (w.notes)
+      h += '<div class="bk-section"><span class="bk-label">学习备注</span>' + esc(w.notes) + "</div>";
+    return h;
+  }
+  function flashAnswer(known) {
+    var w = fc.list[fc.i];
+    srsUpdate(w.word, known ? 4 : 2);
+    if (known) fc.known++; else fc.unknown++;
+    fc.i++;
+    if (fc.i >= fc.list.length) {
+      finishFlash();
+    } else {
+      renderFlash();
+    }
+  }
+  function finishFlash() {
+    $("flashProgFill").style.width = "100%";
+    showResult({
+      title: fc.review ? "复习完成" : "本组完成",
+      main: fc.known + " / " + fc.list.length,
+      sub: "认识",
+      stats: [["认识", fc.known], ["不认识", fc.unknown]],
+    });
+  }
+
+  // ---------- 选择题 ----------
+  var qz = null;
+  function startQuiz() {
+    var list = currentList();
+    if (list.length < 4) { alert("该范围单词太少（需≥4）无法出选择题"); return; }
+    var n = Math.min(10, list.length);
+    var pick = shuffle(list).slice(0, n);
+    qz = { list: pick, pool: list, i: 0, correct: 0, answered: false };
+    show("quiz");
+    renderQuiz();
+  }
+  function renderQuiz() {
+    qz.answered = false;
+    var w = qz.list[qz.i];
+    var reverse = Math.random() < 0.5;  // true: 给释义选单词
+    qz.reverse = reverse;
+    qz.cur = w;
+    $("quizCounter").textContent = (qz.i + 1) + " / " + qz.list.length + " · 正确 " + qz.correct;
+    $("quizProgFill").style.width = (qz.i / qz.list.length * 100) + "%";
+    $("quizNext").classList.add("hidden");
+
+    var distract = shuffle(qz.pool.filter(function (x) { return x.word !== w.word; })).slice(0, 3);
+    var opts = shuffle([w].concat(distract));
+
+    if (reverse) {
+      $("quizPrompt").innerHTML = '<div class="quiz-q">根据释义选出对应单词</div>' +
+        '<div class="quiz-prompt-main small">' + esc(truncate(w.definition, 90)) + "</div>";
+      $("quizOptions").innerHTML = opts.map(function (o) {
+        return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(o.word) +
+          (o.reading ? ' <span style="color:var(--sub);font-size:13px">' + esc(o.reading) + "</span>" : "") + "</button>";
+      }).join("");
+    } else {
+      $("quizPrompt").innerHTML = '<div class="quiz-q">选出单词的正确释义</div>' +
+        '<div class="quiz-prompt-main">' + esc(w.word) + "</div>";
+      $("quizOptions").innerHTML = opts.map(function (o) {
+        return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(truncate(o.definition, 70)) + "</button>";
+      }).join("");
+    }
+  }
+  function quizAnswer(btn) {
+    if (qz.answered) return;
+    qz.answered = true;
+    var chosen = btn.dataset.w;
+    var correct = qz.cur.word;
+    var ok = chosen === correct;
+    if (ok) qz.correct++;
+    srsUpdate(qz.cur.word, ok ? 4 : 2);
+    $$(".opt").forEach(function (b) {
+      b.classList.add("disabled");
+      if (b.dataset.w === correct) b.classList.add("correct");
+      else if (b === btn) b.classList.add("wrong");
+    });
+    $("quizNext").classList.remove("hidden");
+    $("quizCounter").textContent = (qz.i + 1) + " / " + qz.list.length + " · 正确 " + qz.correct;
+  }
+  function quizNext() {
+    qz.i++;
+    if (qz.i >= qz.list.length) {
+      $("quizProgFill").style.width = "100%";
+      var pct = Math.round(qz.correct / qz.list.length * 100);
+      showResult({
+        title: "测验完成",
+        main: pct + "%",
+        sub: "正确率",
+        stats: [["正确", qz.correct], ["错误", qz.list.length - qz.correct]],
+      });
+    } else {
+      renderQuiz();
+    }
+  }
+
+  // ---------- 浏览 ----------
+  function startBrowse() {
+    show("browse");
+    $("searchInput").value = "";
+    renderBrowse("");
+  }
+  function renderBrowse(q) {
+    var list = currentList();
+    q = (q || "").trim().toLowerCase();
+    if (q) {
+      list = list.filter(function (w) {
+        return (w.word && w.word.toLowerCase().indexOf(q) >= 0) ||
+          (w.reading && w.reading.toLowerCase().indexOf(q) >= 0) ||
+          (w.definition && w.definition.toLowerCase().indexOf(q) >= 0);
+      });
+    }
+    $("browseCount").textContent = "共 " + list.length + " 词";
+    var now = Date.now();
+    var html = list.slice(0, 400).map(function (w) {
+      var s = cardState(w.word);
+      var badge = "";
+      if (s && s.due <= now) badge = '<span class="rstate due">待复习</span>';
+      else if (s && s.reps >= 3) badge = '<span class="rstate known">已掌握</span>';
+      else if (s) badge = '<span class="rstate known">已学</span>';
+      return '<div class="row" data-w="' + esc(w.word) + '"><div><div class="rw">' + esc(w.word) +
+        '</div><div class="rr">' + esc(w.reading || "") + " · " + esc(w.category || "") +
+        "</div></div>" + badge + "</div>";
+    }).join("");
+    if (list.length > 400) html += '<div class="empty">仅显示前 400 条，请用搜索缩小范围</div>';
+    $("browseList").innerHTML = html || '<div class="empty">没有匹配的单词</div>';
+  }
+  function openDetail(word) {
+    var w = (state.books[state.book] || []).find(function (x) { return x.word === word; });
+    if (!w) return;
+    $("sheetBody").innerHTML = '<button class="detail-close" id="detailClose">×</button>' + backFace(w);
+    $("detailSheet").classList.remove("hidden");
+    $("detailClose").onclick = closeDetail;
+  }
+  function closeDetail() { $("detailSheet").classList.add("hidden"); }
+
+  // ---------- 结算弹层 ----------
+  function showResult(r) {
+    var stats = r.stats.map(function (s) {
+      return '<div class="stat"><b>' + s[1] + "</b><span>" + s[0] + "</span></div>";
+    }).join("");
+    $("resultBody").innerHTML =
+      "<h2>" + esc(r.title) + "</h2>" +
+      '<div class="result-ring">' + esc(r.main) + "</div>" +
+      '<div style="color:var(--sub);font-size:13px">' + esc(r.sub) + "</div>" +
+      '<div class="result-stats">' + stats + "</div>" +
+      '<button class="big-btn good wide" id="resultHome">返回主页</button>';
+    $("resultSheet").classList.remove("hidden");
+    $("resultHome").onclick = function () {
+      $("resultSheet").classList.add("hidden");
+      show("home");
+      renderHome();
+    };
+  }
+
+  // ---------- 词库切换 ----------
+  function switchBook() {
+    var next = state.book === "simple" ? "advanced" : "simple";
+    var btn = $("bookBtn");
+    btn.textContent = "…";
+    ensureBook(next).then(function () {
+      state.book = next;
+      localStorage.setItem("hj_book", next);
+      // 切换词库后, 若当前筛选是类别且新库无此类别则清除
+      if (state.filter.type === "category") {
+        var has = state.meta.books[next].categories.some(function (c) { return c.name === state.filter.value; });
+        if (!has) state.filter = { type: null, value: null };
+      }
+      renderHome();
+    }).catch(function (e) { alert(e.message); updateBookBtn(); });
+  }
+
+  // ---------- 事件绑定 ----------
+  function bindEvents() {
+    $("backBtn").onclick = function () { show("home"); renderHome(); };
+    $("bookBtn").onclick = switchBook;
+
+    // 模式卡片
+    $$(".mode-card").forEach(function (c) {
+      c.onclick = function () {
+        var m = c.dataset.mode;
+        if (m === "flash") startFlash(false);
+        else if (m === "quiz") startQuiz();
+        else if (m === "review") startFlash(true);
+        else if (m === "browse") startBrowse();
+      };
+    });
+
+    // 筛选 segment
+    $("filterSeg").onclick = function (e) {
+      var b = e.target.closest(".seg-btn");
+      if (!b) return;
+      state.seg = b.dataset.seg;
+      renderFilter();
+    };
+    $("clearFilter").onclick = function () {
+      state.filter = { type: null, value: null };
+      renderHome();
+    };
+    // chip 点击 (委托)
+    $("chipList").onclick = function (e) {
+      var b = e.target.closest(".chip");
+      if (!b) return;
+      var type = b.dataset.type, value = b.dataset.value;
+      if (state.filter.type === type && state.filter.value === value) {
+        state.filter = { type: null, value: null };
+      } else {
+        state.filter = { type: type, value: value };
+      }
+      renderHome();
+    };
+
+    // 闪卡
+    $("flashCard").onclick = function () {
+      fc.flipped = !fc.flipped;
+      $("flashCard").classList.toggle("flipped", fc.flipped);
+    };
+    $("fcKnown").onclick = function () { flashAnswer(true); };
+    $("fcUnknown").onclick = function () { flashAnswer(false); };
+
+    // 测验
+    $("quizOptions").onclick = function (e) {
+      var b = e.target.closest(".opt");
+      if (b) quizAnswer(b);
+    };
+    $("quizNext").onclick = quizNext;
+
+    // 浏览
+    $("searchInput").oninput = function () { renderBrowse(this.value); };
+    $("browseList").onclick = function (e) {
+      var r = e.target.closest(".row");
+      if (r) openDetail(r.dataset.w);
+    };
+    document.querySelector("#detailSheet .sheet-bg").onclick = closeDetail;
+
+    // 键盘 (电脑端)
+    document.addEventListener("keydown", function (e) {
+      if (state.view === "flash") {
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); $("flashCard").click(); }
+        else if (e.key === "ArrowRight" || e.key.toLowerCase() === "k") flashAnswer(true);
+        else if (e.key === "ArrowLeft" || e.key.toLowerCase() === "j") flashAnswer(false);
+      } else if (state.view === "quiz") {
+        if (qz && qz.answered && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); quizNext(); }
+        else if (!qz.answered && /^[1-4]$/.test(e.key)) {
+          var opts = $$(".opt"); if (opts[+e.key - 1]) quizAnswer(opts[+e.key - 1]);
+        }
+      }
+    });
+  }
+
+  // ---------- 激活码门禁 ----------
+  var GRANT_KEY = "hj_access_v1";
+  function sha256Hex(str) {
+    var enc = new TextEncoder().encode(str);
+    if (window.crypto && window.crypto.subtle) {
+      return window.crypto.subtle.digest("SHA-256", enc).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+          return ("0" + b.toString(16)).slice(-2);
+        }).join("");
+      });
+    }
+    return Promise.reject(new Error("nocrypto"));
+  }
+  function accessConfig() { return window.HJ_ACCESS || { enabled: false, codes: [] }; }
+  function hashesOf() { return accessConfig().codes.map(function (c) { return c.hash; }); }
+
+  function checkAccess() {
+    var cfg = accessConfig();
+    if (!cfg.enabled) return Promise.resolve(true);
+    // 已激活且该哈希仍在有效列表里
+    var saved = localStorage.getItem(GRANT_KEY);
+    if (saved && hashesOf().indexOf(saved) >= 0) return Promise.resolve(true);
+    if (saved) localStorage.removeItem(GRANT_KEY); // 已被吊销
+    return new Promise(function (resolve) { showGate(resolve, cfg); });
+  }
+  function showGate(resolve, cfg) {
+    var gate = $("gate"), input = $("gateInput"), err = $("gateErr"), btn = $("gateBtn");
+    gate.classList.remove("hidden");
+    setTimeout(function () { input.focus(); }, 100);
+    function attempt() {
+      var code = (input.value || "").trim().toUpperCase().replace(/\s/g, "");
+      if (!code) { err.textContent = "请输入激活码"; return; }
+      btn.disabled = true; btn.textContent = "验证中…";
+      sha256Hex(cfg.salt + ":" + code).then(function (h) {
+        btn.disabled = false; btn.textContent = "激活";
+        if (hashesOf().indexOf(h) >= 0) {
+          localStorage.setItem(GRANT_KEY, h);
+          gate.classList.add("hidden");
+          resolve(true);
+        } else {
+          err.textContent = "激活码无效，请检查后重试";
+          input.select();
+        }
+      }).catch(function () {
+        btn.disabled = false; btn.textContent = "激活";
+        err.textContent = "此浏览器不支持验证，请用 HTTPS 或较新浏览器打开";
+      });
+    }
+    btn.onclick = attempt;
+    input.onkeydown = function (e) { if (e.key === "Enter") attempt(); };
+  }
+
+  // ---------- 启动 ----------
+  function boot() {
+    checkAccess().then(startApp);
+  }
+  function startApp() {
+    Promise.all([loadScript("data/meta.js"), loadScript("data/directions.js")])
+      .then(function () {
+        state.meta = window.__HJ__.meta;
+        state.directions = window.__HJ__.directions;
+        return ensureBook(state.book);
+      })
+      .then(function () {
+        bindEvents();
+        show("home");
+        renderHome();
+      })
+      .catch(function (e) {
+        document.body.innerHTML = '<div class="loading">数据加载失败：' + esc(e.message) +
+          "<br>请通过本地服务器或部署后访问（见 README）。</div>";
+      });
+
+    // service worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(function () { });
+    }
+  }
+
+  boot();
+})();

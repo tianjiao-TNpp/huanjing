@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f8a5b" />
+  <title>环境百词斩</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 激活码门禁 -->
+  <div id="gate" class="gate hidden">
+    <div class="gate-card">
+      <div class="gate-logo">🌿</div>
+      <h2>环境百词斩</h2>
+      <p class="gate-tip">请输入激活码以开始使用</p>
+      <input id="gateInput" class="gate-input" type="text" autocomplete="off"
+        autocapitalize="characters" placeholder="例如 ABCD-1234" />
+      <div id="gateErr" class="gate-err"></div>
+      <button id="gateBtn" class="big-btn good wide">激活</button>
+      <p class="gate-foot">激活后本设备将记住你，无需重复输入。<br>没有激活码？请联系作者获取。</p>
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- 顶部栏 -->
+    <header class="topbar">
+      <button id="backBtn" class="icon-btn hidden" title="返回">‹</button>
+      <h1 id="title">环境百词斩</h1>
+      <button id="bookBtn" class="book-btn" title="切换词库">简易</button>
+    </header>
+
+    <!-- 主页 -->
+    <main id="view-home" class="view">
+      <div class="stat-strip" id="statStrip"></div>
+      <div class="mode-grid">
+        <button class="mode-card" data-mode="flash">
+          <span class="mode-ico">🃏</span>
+          <span class="mode-name">闪卡翻面</span>
+          <span class="mode-sub">看词猜义，标记认识与否</span>
+        </button>
+        <button class="mode-card" data-mode="quiz">
+          <span class="mode-ico">📝</span>
+          <span class="mode-name">选择题测验</span>
+          <span class="mode-sub">四选一，正反向出题</span>
+        </button>
+        <button class="mode-card" data-mode="review">
+          <span class="mode-ico">🔁</span>
+          <span class="mode-name">间隔复习</span>
+          <span class="mode-sub" id="reviewSub">智能安排到期单词</span>
+        </button>
+        <button class="mode-card" data-mode="browse">
+          <span class="mode-ico">📖</span>
+          <span class="mode-name">浏览词表</span>
+          <span class="mode-sub">按分类/研究方向查看</span>
+        </button>
+      </div>
+
+      <section class="filter-box">
+        <div class="filter-head">
+          <span>学习范围</span>
+          <button id="clearFilter" class="link-btn">全部</button>
+        </div>
+        <div class="seg" id="filterSeg">
+          <button class="seg-btn active" data-seg="category">术语类别</button>
+          <button class="seg-btn" data-seg="direction">研究方向</button>
+        </div>
+        <div id="chipList" class="chip-list"></div>
+        <div class="filter-summary" id="filterSummary"></div>
+      </section>
+    </main>
+
+    <!-- 闪卡 -->
+    <main id="view-flash" class="view hidden">
+      <div class="progress-line"><div id="flashProgFill" class="progress-fill"></div></div>
+      <div class="counter" id="flashCounter"></div>
+      <div class="flash-wrap">
+        <div id="flashCard" class="flash-card">
+          <div class="flash-face flash-front">
+            <div class="fc-word" id="fcWord"></div>
+            <div class="fc-reading" id="fcReading"></div>
+            <div class="fc-hint">点击卡片查看释义</div>
+          </div>
+          <div class="flash-face flash-back" id="fcBack"></div>
+        </div>
+      </div>
+      <div class="flash-actions">
+        <button class="big-btn bad" id="fcUnknown">✕ 不认识</button>
+        <button class="big-btn good" id="fcKnown">✓ 认识</button>
+      </div>
+    </main>
+
+    <!-- 测验 -->
+    <main id="view-quiz" class="view hidden">
+      <div class="progress-line"><div id="quizProgFill" class="progress-fill"></div></div>
+      <div class="counter" id="quizCounter"></div>
+      <div class="quiz-q" id="quizPrompt"></div>
+      <div class="quiz-options" id="quizOptions"></div>
+      <button class="big-btn good wide hidden" id="quizNext">下一题 ›</button>
+    </main>
+
+    <!-- 浏览 -->
+    <main id="view-browse" class="view hidden">
+      <input id="searchInput" class="search" placeholder="搜索单词 / 读音 / 释义…" />
+      <div class="browse-count" id="browseCount"></div>
+      <div id="browseList" class="browse-list"></div>
+    </main>
+
+    <!-- 词条详情弹层 -->
+    <div id="detailSheet" class="sheet hidden">
+      <div class="sheet-bg"></div>
+      <div class="sheet-body" id="sheetBody"></div>
+    </div>
+
+    <!-- 结算 -->
+    <div id="resultSheet" class="sheet hidden">
+      <div class="sheet-bg"></div>
+      <div class="sheet-body result-body" id="resultBody"></div>
+    </div>
+  </div>
+
+  <script src="access.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
