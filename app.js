@@ -5,6 +5,45 @@
   var DAY = 86400000;
   var $ = function (id) { return document.getElementById(id); };
 
+  // ---------- 日语朗读 (浏览器内置语音合成, 免费) ----------
+  var TTS = {
+    voice: null,
+    supported: function () { return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window; },
+    init: function () {
+      if (!TTS.supported()) return;
+      var pick = function () {
+        var vs = window.speechSynthesis.getVoices() || [];
+        var ja = vs.filter(function (v) { return /ja([-_]|$)/i.test(v.lang) || /japan/i.test(v.name); });
+        if (ja.length) TTS.voice = ja[0];
+      };
+      pick();
+      try { window.speechSynthesis.onvoiceschanged = pick; } catch (e) { }
+    },
+    speak: function (text) {
+      if (!text || !TTS.supported()) return;
+      try {
+        window.speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(String(text));
+        u.lang = "ja-JP";
+        if (TTS.voice) u.voice = TTS.voice;
+        u.rate = 0.92; u.pitch = 1;
+        window.speechSynthesis.speak(u);
+      } catch (e) { }
+    }
+  };
+  function sayOf(w) { return w ? (w.reading || w.word) : ""; }       // 优先念假名读音, 发音更准
+  function autoOn() { return localStorage.getItem("hj_autoplay") === "1"; }
+  function setAuto(v) { localStorage.setItem("hj_autoplay", v ? "1" : "0"); }
+  function speakBtnHtml(w) {
+    if (!TTS.supported()) return "";
+    return '<button class="speak-btn" data-speak="' + esc(sayOf(w)) + '" title="朗读发音">🔊</button>';
+  }
+  function handleSpeakClick(e) {
+    var b = e.target.closest && e.target.closest(".speak-btn");
+    if (b) { e.stopPropagation(); if (e.preventDefault) e.preventDefault(); TTS.speak(b.getAttribute("data-speak")); return true; }
+    return false;
+  }
+
   // ---------- 全局状态 ----------
   var state = {
     book: localStorage.getItem("hj_book") || "simple",
@@ -140,7 +179,21 @@
       : (d.fresh > 0 ? d.fresh + " 个新词待学" : "全部已复习 🎉");
     renderFilter();
     updateBookBtn();
+    renderSettings();
     renderDeviceFoot();
+  }
+  function renderSettings() {
+    var el = $("settingsRow");
+    if (!el) return;
+    if (!TTS.supported()) { el.innerHTML = '<div class="set-item" style="opacity:.6">此设备不支持语音朗读</div>'; return; }
+    el.innerHTML = '<div class="set-item"><span>🔊 卡片出现时自动朗读</span>' +
+      '<button id="autoBtn" class="toggle' + (autoOn() ? " on" : "") + '" title="自动朗读开关"><span class="knob"></span></button></div>';
+    $("autoBtn").onclick = function () {
+      var nv = !autoOn();
+      setAuto(nv);
+      renderSettings();
+      if (nv) TTS.speak("こんにちは");  // 开启时念一句确认能出声
+    };
   }
   function renderDeviceFoot() {
     var el = $("deviceFoot");
@@ -215,12 +268,18 @@
     $("flashCard").classList.remove("flipped");
     $("fcWord").textContent = w.word;
     $("fcReading").textContent = w.reading || "";
+    var sp = $("fcSpeak");
+    if (sp) {
+      sp.style.display = TTS.supported() ? "" : "none";
+      sp.setAttribute("data-speak", sayOf(w));
+    }
     $("fcBack").innerHTML = backFace(w);
     $("flashCounter").textContent = (fc.i + 1) + " / " + fc.list.length;
     $("flashProgFill").style.width = (fc.i / fc.list.length * 100) + "%";
+    if (autoOn()) TTS.speak(sayOf(w));
   }
   function backFace(w) {
-    var h = '<div class="bk-word">' + esc(w.word) + "</div>";
+    var h = '<div class="bk-word">' + esc(w.word) + speakBtnHtml(w) + "</div>";
     if (w.reading) h += '<div class="bk-reading">' + esc(w.reading) + "</div>";
     if (w.category) h += '<span class="bk-cat">' + esc(w.category) + "</span>";
     h += '<div class="bk-section bk-def"><span class="bk-label">释义</span>' + esc(w.definition) + "</div>";
@@ -280,15 +339,17 @@
     var opts = shuffle([w].concat(distract));
 
     if (reverse) {
+      // 答案是单词, 答题前不显示, 故🔊放到答完后揭晓
       $("quizPrompt").innerHTML = '<div class="quiz-q">根据释义选出对应单词</div>' +
-        '<div class="quiz-prompt-main small">' + esc(truncate(w.definition, 90)) + "</div>";
+        '<div class="quiz-prompt-main small">' + esc(truncate(w.definition, 90)) +
+        '</div><div id="quizSpeakHolder"></div>';
       $("quizOptions").innerHTML = opts.map(function (o) {
         return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(o.word) +
           (o.reading ? ' <span style="color:var(--sub);font-size:13px">' + esc(o.reading) + "</span>" : "") + "</button>";
       }).join("");
     } else {
       $("quizPrompt").innerHTML = '<div class="quiz-q">选出单词的正确释义</div>' +
-        '<div class="quiz-prompt-main">' + esc(w.word) + "</div>";
+        '<div class="quiz-prompt-main">' + esc(w.word) + speakBtnHtml(w) + "</div>";
       $("quizOptions").innerHTML = opts.map(function (o) {
         return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(truncate(o.definition, 70)) + "</button>";
       }).join("");
@@ -309,6 +370,10 @@
     });
     $("quizNext").classList.remove("hidden");
     $("quizCounter").textContent = (qz.i + 1) + " / " + qz.list.length + " · 正确 " + qz.correct;
+    // 揭晓发音：反向题此时补上🔊；并按设置自动朗读正确单词
+    var holder = $("quizSpeakHolder");
+    if (holder) holder.innerHTML = speakBtnHtml(qz.cur);
+    if (autoOn()) TTS.speak(sayOf(qz.cur));
   }
   function quizNext() {
     qz.i++;
@@ -444,7 +509,8 @@
     };
 
     // 闪卡
-    $("flashCard").onclick = function () {
+    $("flashCard").onclick = function (e) {
+      if (handleSpeakClick(e)) return;   // 点🔊只发音, 不翻面
       fc.flipped = !fc.flipped;
       $("flashCard").classList.toggle("flipped", fc.flipped);
     };
@@ -457,6 +523,7 @@
       if (b) quizAnswer(b);
     };
     $("quizNext").onclick = quizNext;
+    $("quizPrompt").onclick = handleSpeakClick;  // 题目区的🔊
 
     // 浏览
     $("searchInput").oninput = function () { renderBrowse(this.value); };
@@ -465,6 +532,7 @@
       if (r) openDetail(r.dataset.w);
     };
     document.querySelector("#detailSheet .sheet-bg").onclick = closeDetail;
+    $("sheetBody").onclick = handleSpeakClick;  // 详情弹层里的🔊
 
     // 键盘 (电脑端)
     document.addEventListener("keydown", function (e) {
@@ -606,6 +674,7 @@
 
   // ---------- 启动 ----------
   function boot() {
+    TTS.init();
     if (getDevice()) {
       startApp();
       syncNow(true); // 后台校验是否被登出

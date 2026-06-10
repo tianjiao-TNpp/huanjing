@@ -100,6 +100,24 @@ body {
 .chip.active { background: var(--green); color: #fff; border-color: var(--green); }
 .chip small { opacity: .7; margin-left: 4px; }
 .filter-summary { margin-top: 10px; font-size: 13px; color: var(--sub); }
+/* 朗读按钮 */
+.speak-btn {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 50%;
+  width: 30px; height: 30px; cursor: pointer; font-size: 15px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  vertical-align: middle; margin-left: 8px; padding: 0; color: var(--text);
+}
+.speak-btn:active { background: var(--green); }
+.fc-speak { width: 48px; height: 48px; font-size: 22px; margin: 16px 0 0; }
+
+/* 设置开关 */
+.settings-row { margin: 18px 0 2px; }
+.set-item { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 13px; color: var(--sub); }
+.toggle { width: 42px; height: 24px; border-radius: 12px; background: var(--line); border: none; position: relative; cursor: pointer; transition: background .2s; padding: 0; }
+.toggle.on { background: var(--green); }
+.toggle .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; }
+.toggle.on .knob { left: 21px; }
+
 .device-foot { text-align: center; font-size: 12px; color: var(--sub); margin: 18px 0 4px; }
 .device-foot a { color: var(--bad); text-decoration: none; }
 
