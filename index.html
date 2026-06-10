@@ -121,6 +121,26 @@
       <div class="sheet-body" id="sheetBody"></div>
     </div>
 
+    <!-- 报错/反馈 -->
+    <div id="feedbackSheet" class="sheet hidden">
+      <div class="sheet-bg"></div>
+      <div class="sheet-body" id="feedbackBody">
+        <button class="detail-close" id="fbClose">×</button>
+        <h3 style="margin:2px 0 4px">报错 / 提建议</h3>
+        <div class="fb-word" id="fbWord"></div>
+        <div class="fb-label">问题类型</div>
+        <div class="seg" id="fbType">
+          <button class="seg-btn active" data-t="读音错误">读音</button>
+          <button class="seg-btn" data-t="释义错误">释义</button>
+          <button class="seg-btn" data-t="其他">其他</button>
+        </div>
+        <div class="fb-label">详细说明（正确答案是什么？）</div>
+        <textarea id="fbMsg" class="fb-msg" rows="4" placeholder="例如：读音应为 さくげん，不是 しょうげん"></textarea>
+        <div id="fbErr" class="gate-err"></div>
+        <button class="big-btn good wide" id="fbSubmit">提交</button>
+      </div>
+    </div>
+
     <!-- 结算 -->
     <div id="resultSheet" class="sheet hidden">
       <div class="sheet-bg"></div>

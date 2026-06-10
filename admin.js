@@ -47,14 +47,6 @@
     });
   }
 
-  function refresh() {
-    $("errBox").textContent = "加载中…";
-    api("list").then(function (res) {
-      if (res && res.ok) { $("errBox").textContent = ""; render(res); }
-      else $("errBox").textContent = (res && res.error) || "加载失败";
-    }).catch(function (e) { $("errBox").textContent = e.message; });
-  }
-
   function action(sub, deviceId, name) {
     var labels = { revoke: "强制登出", activate: "恢复", delete: "彻底删除" };
     if (!confirm("确定要对「" + name + "」执行【" + labels[sub] + "】吗？")) return;
@@ -113,6 +105,62 @@
     b += '<button class="act del" onclick="__hjAction(\'delete\',\'' + d.deviceId + "','" + nm + "')\">删除</button>";
     return b;
   }
+
+  var curView = "devices";
+  function refresh() {
+    if (curView === "feedback") return refreshFb();
+    refreshDevices();
+  }
+  function refreshDevices() {
+    $("errBox").textContent = "加载中…";
+    api("list").then(function (res) {
+      if (res && res.ok) { $("errBox").textContent = ""; render(res); }
+      else $("errBox").textContent = (res && res.error) || "加载失败";
+    }).catch(function (e) { $("errBox").textContent = e.message; });
+  }
+  function refreshFb() {
+    $("errBox").textContent = "加载中…";
+    api("fb_list").then(function (res) {
+      if (res && res.ok) { $("errBox").textContent = ""; renderFb(res.feedback || []); }
+      else $("errBox").textContent = (res && res.error) || "加载失败";
+    }).catch(function (e) { $("errBox").textContent = e.message; });
+  }
+  function renderFb(list) {
+    var pending = list.filter(function (f) { return f.status !== "已处理"; }).length;
+    $("fbCount").textContent = pending ? "(" + pending + ")" : "";
+    $("summary").textContent = "共 " + list.length + " 条反馈 · 待处理 " + pending;
+    $("fbBox").innerHTML = list.length ? list.map(function (f) {
+      return '<div class="fb-item' + (f.status === "已处理" ? " done" : "") + '">' +
+        '<div class="fb-meta"><span class="fb-tag">' + esc(f.type || "其他") + "</span>" +
+        '<span class="w">' + esc(f.word || "(无单词)") + "</span>" +
+        "<span>· " + esc(f.name) + " · " + esc(f.book) + " · " + esc(f.time) + "</span></div>" +
+        '<div class="msg">' + esc(f.message) + "</div>" +
+        '<div>' + (f.status === "已处理" ? '<span class="muted">已处理</span> ' :
+          '<button class="act restore" onclick="__fbAct(\'fb_done\',' + f.row + ')">标记已处理</button>') +
+        '<button class="act del" onclick="__fbAct(\'fb_delete\',' + f.row + ')">删除</button></div></div>';
+    }).join("") : '<p class="muted">还没有学生反馈。</p>';
+  }
+  window.__fbAct = function (sub, row) {
+    if (sub === "fb_delete" && !confirm("确定删除这条反馈？")) return;
+    api(sub, { row: row }).then(function (res) {
+      if (res && res.ok) refreshFb(); else alert((res && res.error) || "操作失败");
+    }).catch(function (e) { alert(e.message); });
+  };
+  function switchView(v) {
+    curView = v;
+    [].forEach.call(document.querySelectorAll("#viewSeg .seg-btn"), function (b) {
+      b.classList.toggle("active", b.getAttribute("data-v") === v);
+    });
+    var dev = v === "devices";
+    $("tableBox").style.display = dev ? "" : "none";
+    $("cardsBox").style.display = dev ? "" : "none";
+    $("fbBox").style.display = dev ? "none" : "";
+    $("serverTime").style.display = dev ? "" : "none";
+    refresh();
+  }
+  document.getElementById("viewSeg").onclick = function (e) {
+    var b = e.target.closest(".seg-btn"); if (b) switchView(b.getAttribute("data-v"));
+  };
 
   $("loginBtn").onclick = login;
   $("secret").onkeydown = function (e) { if (e.key === "Enter") login(); };

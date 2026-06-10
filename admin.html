@@ -40,6 +40,15 @@
       .card h3 { margin:0 0 6px; font-size:16px; }
       .card .kv { font-size:13px; color:var(--sub); margin:2px 0; }
     }
+    .seg { display: flex; background: #eef3f0; border-radius: 10px; padding: 3px; }
+    .seg .seg-btn.active { background: #fff; color: var(--green); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+    .seg .seg-btn { color: var(--sub); }
+    .fb-item { background: #fff; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 3px 12px rgba(0,0,0,.06); }
+    .fb-item.done { opacity: .55; }
+    .fb-meta { font-size: 12px; color: var(--sub); margin-bottom: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .fb-tag { background: #eef3f0; border-radius: 8px; padding: 1px 8px; }
+    .fb-item .w { font-weight: 700; font-size: 16px; }
+    .fb-item .msg { margin: 6px 0; white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -57,6 +66,10 @@
   </div>
 
   <div id="panel" class="wrap" style="display:none">
+    <div class="seg" id="viewSeg" style="max-width:320px;margin-bottom:12px">
+      <button class="seg-btn active" data-v="devices" style="border:none;background:none;flex:1;padding:8px;border-radius:8px;cursor:pointer;font-weight:600">设备列表</button>
+      <button class="seg-btn" data-v="feedback" style="border:none;background:none;flex:1;padding:8px;border-radius:8px;cursor:pointer;font-weight:600">学生反馈 <span id="fbCount"></span></button>
+    </div>
     <div class="bar">
       <button class="btn" id="refresh">↻ 刷新</button>
       <span id="summary" class="muted"></span>
@@ -66,6 +79,7 @@
     <div id="errBox" class="err"></div>
     <div id="tableBox"></div>
     <div id="cardsBox" class="cards"></div>
+    <div id="fbBox" style="display:none"></div>
   </div>
 
   <script src="config.js"></script>

@@ -330,6 +330,7 @@
         w.confusing.map(function (t) { return '<span class="mini-tag">' + esc(t) + "</span>"; }).join("") + "</div></div>";
     if (w.notes)
       h += '<div class="bk-section"><span class="bk-label">学习备注</span>' + esc(w.notes) + "</div>";
+    h += '<button class="fb-report" data-fb="' + esc(w.word) + '">🚩 报错 / 提建议</button>';
     return h;
   }
   function flashAnswer(known) {
@@ -470,6 +471,43 @@
   }
   function closeDetail() { $("detailSheet").classList.add("hidden"); }
 
+  // ---------- 报错 / 反馈 ----------
+  var fbWord = null;
+  function openFeedback(word) {
+    fbWord = word;
+    $("fbWord").textContent = word;
+    $("fbMsg").value = "";
+    $("fbErr").textContent = "";
+    $$("#fbType .seg-btn").forEach(function (b, i) { b.classList.toggle("active", i === 0); });
+    $("feedbackSheet").classList.remove("hidden");
+    setTimeout(function () { $("fbMsg").focus(); }, 100);
+  }
+  function closeFeedback() { $("feedbackSheet").classList.add("hidden"); }
+  function handleFbClick(e) {
+    var b = e.target.closest && e.target.closest(".fb-report");
+    if (b) { e.stopPropagation(); openFeedback(b.getAttribute("data-fb")); return true; }
+    return false;
+  }
+  function submitFeedback() {
+    var act = document.querySelector("#fbType .seg-btn.active");
+    var type = act ? act.getAttribute("data-t") : "其他";
+    var msg = ($("fbMsg").value || "").trim();
+    if (!msg) { $("fbErr").textContent = "请填写详细说明"; return; }
+    var dev = getDevice() || {};
+    var btn = $("fbSubmit"); btn.disabled = true; btn.textContent = "提交中…";
+    apiCall("feedback", {
+      deviceId: dev.deviceId, name: dev.name, book: state.book,
+      word: fbWord, type: type, message: msg, ua: navigator.userAgent
+    }, 12000).then(function (res) {
+      btn.disabled = false; btn.textContent = "提交";
+      if (res && res.ok) { closeFeedback(); alert("已提交，谢谢你的反馈！🌿"); }
+      else { $("fbErr").textContent = (res && res.error) || "提交失败，请重试"; }
+    }).catch(function () {
+      btn.disabled = false; btn.textContent = "提交";
+      $("fbErr").textContent = "提交失败：无法连接服务器（可能网络受限）。可截图发给老师。";
+    });
+  }
+
   // ---------- 结算弹层 ----------
   function showResult(r) {
     syncNow(true); // 一组学完, 上报进度
@@ -550,6 +588,7 @@
     // 闪卡
     $("flashCard").onclick = function (e) {
       if (handleSpeakClick(e)) return;   // 点🔊只发音, 不翻面
+      if (handleFbClick(e)) return;      // 点报错不翻面
       fc.flipped = !fc.flipped;
       $("flashCard").classList.toggle("flipped", fc.flipped);
     };
@@ -571,7 +610,17 @@
       if (r) openDetail(r.dataset.w);
     };
     document.querySelector("#detailSheet .sheet-bg").onclick = closeDetail;
-    $("sheetBody").onclick = handleSpeakClick;  // 详情弹层里的🔊
+    $("sheetBody").onclick = function (e) { if (!handleSpeakClick(e)) handleFbClick(e); };  // 详情里🔊/报错
+
+    // 报错/反馈
+    $("fbClose").onclick = closeFeedback;
+    document.querySelector("#feedbackSheet .sheet-bg").onclick = closeFeedback;
+    $("fbType").onclick = function (e) {
+      var b = e.target.closest(".seg-btn"); if (!b) return;
+      $$("#fbType .seg-btn").forEach(function (x) { x.classList.remove("active"); });
+      b.classList.add("active");
+    };
+    $("fbSubmit").onclick = submitFeedback;
 
     // 键盘 (电脑端)
     document.addEventListener("keydown", function (e) {
