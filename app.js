@@ -141,6 +141,45 @@
     });
   }
   function truncate(s, n) { s = s || ""; return s.length > n ? s.slice(0, n) + "…" : s; }
+  // 日语新字体 -> 中文简体 的字形归一化(释义多为中文, 术语为日语, 字形常不同)
+  var JP2CN = (function () {
+    var s = "汚污 気气 廃废 価价 効效 圧压 関关 産产 済济 経经 観观 総总 実实 様样 増增 処处 規规 録录 響响 県县 帰归 鉄铁 戦战 単单 売卖 読读 続续 図图 黒黑 雑杂 視视 児儿 釈释 収收 従从 渋涩 縦纵 諸诸 緒绪 触触 壌壤 譲让 醸酿 静静 斉齐 摂摄 節节 説说 専专 銭钱 潜潜 繊纤 装装 騒骚 蔵藏 贈赠 属属 帯带 滞滞 沢泽 担担 胆胆 嘆叹 団团 弾弹 断断 遅迟 鋳铸 庁厅 聴听 鎮镇 転转 伝传 党党 盗盗 闘斗 徳德 脳脑 麦麦 発发 髪发 抜拔 晩晚 浜滨 賓宾 頻频 譜谱 仏佛 紛纷 噴喷 並并 閉闭 変变 報报 豊丰 縫缝 訳译 薬药 予预 謡谣 頼赖 覧览 慮虑 両两 猟猎 緑绿 隣邻 涙泪 類类 励励 鈴铃 暦历 歴历 練练 錬炼 労劳 営营 衛卫 栄荣 塩盐 応应 仮假 拡扩 覚觉 楽乐 顔颜 偽伪 挙举 郷乡 駆驱 恵惠 継继 軽轻 撃击 険险 圏圈 検检 権权 顕显 験验 厳严 広广 鉱矿 穀谷 砕碎 剤剂 殺杀 賛赞 歯齿 獣兽 縄绳 勢势 漸渐 礎础 択择 達达 奪夺 脱脱 隠隐 円圆 壊坏 戯戏 環环 態态 電电 減减 濃浓 縮缩 棄弃 採采 際际 結结 連连 鋼钢 鉛铅 銅铜 銀银 還还 給给 統统 紹绍 細细 終终 組组 絡络 網网 線线 編编 緩缓 績绩 縁缘 質质 飛飞 馬马 鳥鸟 魚鱼 竜龙 滅灭 師师 異异 橋桥 顧顾 護护 議议 鋭锐 錯错 鎖锁 評评 準准 監监 負负 風风 機机 種种 開开 計计 約约 書书 倫伦 業业 資资 間间 場场 園园 層层 導导 張张 強强 後后 復复 愛爱 慣惯 戸户 島岛 孫孙 審审 寧宁 庫库 問问 門门 聞闻 養养 館馆 頭头 題题 願愿 飲饮 織织 紀纪 級级 納纳 紅红 純纯 緊紧 締缔 帳帐 帥帅 巻卷";
+    var m = {};
+    s.split(/\s+/).forEach(function (p) { if (p.length >= 2) m[p.charAt(0)] = p.charAt(1); });
+    return m;
+  })();
+  function normJ(s) { return s.replace(/[　-￿]/g, function (c) { return JP2CN[c] || c; }); }
+
+  // 把释义里出现的"术语"本身挖空成下划线, 防止靠文字相同直接选出答案
+  var BLANK_HTML = '<span class="blank">＿＿＿</span>';
+  function maskTerm(text, term) {
+    text = text || "";
+    if (!term || term.length < 2) return esc(text);
+    var nt = normJ(term), ntext = normJ(text), L = nt.length;
+    // 1) 归一化后精确出现 -> 全部挖空
+    if (ntext.indexOf(nt) >= 0) {
+      var out = "", i = 0, j;
+      while ((j = ntext.indexOf(nt, i)) >= 0) { out += esc(text.slice(i, j)) + BLANK_HTML; i = j + L; }
+      return out + esc(text.slice(i));
+    }
+    // 2) 模糊兜底: 找最相似的一处窗口(归一化后≥60%字相同), 只挖这一处
+    var best = -1, bi = -1;
+    for (var p = 0; p + L <= ntext.length; p++) {
+      var mt = 0;
+      for (var k = 0; k < L; k++) if (ntext.charAt(p + k) === nt.charAt(k)) mt++;
+      if (mt > best) { best = mt; bi = p; }
+    }
+    if (bi >= 0 && best >= Math.max(2, Math.ceil(L * 0.6))) {
+      return esc(text.slice(0, bi)) + BLANK_HTML + esc(text.slice(bi + L));
+    }
+    // 3) 首字锚定: 释义开头常直接复述术语, 首字相同且过半相同则挖掉开头 L 个字
+    var lead = 0;
+    for (var q = 0; q < L && q < ntext.length; q++) if (ntext.charAt(q) === nt.charAt(q)) lead++;
+    if (ntext.charAt(0) === nt.charAt(0) && lead >= Math.ceil(L * 0.5) && text.length >= L) {
+      return BLANK_HTML + esc(text.slice(L));
+    }
+    return esc(text);
+  }
 
   // ---------- 视图切换 ----------
   function show(view) {
@@ -341,7 +380,7 @@
     if (reverse) {
       // 答案是单词, 答题前不显示, 故🔊放到答完后揭晓
       $("quizPrompt").innerHTML = '<div class="quiz-q">根据释义选出对应单词</div>' +
-        '<div class="quiz-prompt-main small">' + esc(truncate(w.definition, 90)) +
+        '<div class="quiz-prompt-main small">' + maskTerm(truncate(w.definition, 90), w.word) +
         '</div><div id="quizSpeakHolder"></div>';
       $("quizOptions").innerHTML = opts.map(function (o) {
         return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(o.word) +
@@ -351,7 +390,7 @@
       $("quizPrompt").innerHTML = '<div class="quiz-q">选出单词的正确释义</div>' +
         '<div class="quiz-prompt-main">' + esc(w.word) + speakBtnHtml(w) + "</div>";
       $("quizOptions").innerHTML = opts.map(function (o) {
-        return '<button class="opt" data-w="' + esc(o.word) + '">' + esc(truncate(o.definition, 70)) + "</button>";
+        return '<button class="opt" data-w="' + esc(o.word) + '">' + maskTerm(truncate(o.definition, 70), o.word) + "</button>";
       }).join("");
     }
   }
