@@ -12,3 +12,8 @@ server/
 
 # 本地预览配置
 .claude/
+读音校对.xlsx
+_*.json
+corrections_auto.json
+读音待确认.xlsx
+读音改动日志.json
