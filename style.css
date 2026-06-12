@@ -247,6 +247,15 @@ body {
   font-size: 15px; background: var(--bg); color: var(--text); resize: vertical; font-family: inherit; }
 .fb-msg:focus { outline: none; border-color: var(--green); }
 
+/* 错题本 */
+.wrong-top { margin-bottom: 12px; }
+.wrong-count { font-size: 14px; color: var(--sub); margin-bottom: 10px; }
+.wrong-bar { display: flex; align-items: center; gap: 14px; }
+.wrong-bar .big-btn { flex: 1; padding: 13px; }
+.rm-btn { margin-left: auto; background: none; border: none; color: var(--sub);
+  font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.rm-btn:active { background: var(--bg); color: var(--bad); }
+
 .empty { text-align: center; color: var(--sub); padding: 50px 20px; }
 .loading { text-align: center; color: var(--sub); padding: 40px; }
 

@@ -1,5 +1,5 @@
 /* 环境百词斩 service worker — 离线缓存 */
-var CACHE = "hj-cache-v13";
+var CACHE = "hj-cache-v14";
 var ASSETS = [
   "./",
   "./index.html",

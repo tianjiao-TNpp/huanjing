@@ -64,6 +64,20 @@
   function saveStore(s) { localStorage.setItem(STORE_KEY, JSON.stringify(s)); }
   var store = loadStore();
 
+  // ---------- 错题本 (答错收集) ----------
+  var WRONG_KEY = "hj_wrong_v1";
+  var wrong = (function () { try { return JSON.parse(localStorage.getItem(WRONG_KEY)) || {}; } catch (e) { return {}; } })();
+  function saveWrong() { localStorage.setItem(WRONG_KEY, JSON.stringify(wrong)); }
+  function wrongBook() { if (!wrong[state.book]) wrong[state.book] = {}; return wrong[state.book]; }
+  function wrongAdd(word) { var b = wrongBook(); if (!b[word]) { b[word] = Date.now(); saveWrong(); } }
+  function wrongRemove(word) { var b = wrongBook(); if (b[word]) { delete b[word]; saveWrong(); } }
+  function wrongWords() {  // 当前词库里仍存在的错词, 新加入的在前
+    var b = wrongBook(), idx = wordIndex(), arr = [];
+    for (var w in b) { if (idx[w]) arr.push({ word: w, t: b[w], e: idx[w] }); }
+    arr.sort(function (a, c) { return c.t - a.t; });
+    return arr;
+  }
+
   function bookStore() {
     if (!store[state.book]) store[state.book] = {};
     return store[state.book];
@@ -184,11 +198,11 @@
   // ---------- 视图切换 ----------
   function show(view) {
     state.view = view;
-    ["home", "flash", "quiz", "browse"].forEach(function (v) {
+    ["home", "flash", "quiz", "browse", "wrong"].forEach(function (v) {
       $("view-" + v).classList.toggle("hidden", v !== view);
     });
     $("backBtn").classList.toggle("hidden", view === "home");
-    var titles = { home: "环境百词斩", flash: "闪卡翻面", quiz: "选择题测验", browse: "浏览词表" };
+    var titles = { home: "环境百词斩", flash: "闪卡翻面", quiz: "选择题测验", browse: "浏览词表", wrong: "错题本" };
     $("title").textContent = titles[view] || "环境百词斩";
     window.scrollTo(0, 0);
   }
@@ -216,6 +230,8 @@
     $("reviewSub").textContent = d.due > 0
       ? (d.due + " 个到期 · " + d.fresh + " 个新词")
       : (d.fresh > 0 ? d.fresh + " 个新词待学" : "全部已复习 🎉");
+    var wc = wrongWords().length;
+    $("wrongSub").textContent = wc ? wc + " 个错词待复习" : "收集答错的词";
     renderFilter();
     updateBookBtn();
     renderSettings();
@@ -359,7 +375,7 @@
   function flashAnswer(known) {
     var w = fc.list[fc.i];
     srsUpdate(w.word, known ? 4 : 2);
-    if (known) fc.known++; else fc.unknown++;
+    if (known) { fc.known++; wrongRemove(w.word); } else { fc.unknown++; wrongAdd(w.word); }
     fc.i++;
     if (fc.i >= fc.list.length) {
       finishFlash();
@@ -370,9 +386,9 @@
   function finishFlash() {
     $("flashProgFill").style.width = "100%";
     showResult({
-      title: fc.review ? "复习完成" : "本组完成",
+      title: fc.wrong ? "错题复习完成" : (fc.review ? "复习完成" : "本组完成"),
       main: fc.known + " / " + fc.list.length,
-      sub: "认识",
+      sub: fc.wrong ? "已掌握(移出错题本)" : "认识",
       stats: [["认识", fc.known], ["不认识", fc.unknown]],
     });
   }
@@ -426,6 +442,7 @@
     var ok = chosen === correct;
     if (ok) qz.correct++;
     srsUpdate(qz.cur.word, ok ? 4 : 2);
+    if (ok) wrongRemove(qz.cur.word); else wrongAdd(qz.cur.word);
     $$(".opt").forEach(function (b) {
       b.classList.add("disabled");
       if (b.dataset.w === correct) b.classList.add("correct");
@@ -493,6 +510,29 @@
     if (list.length > 400) html += '<div class="empty">仅显示前 400 条，请用搜索缩小范围</div>';
     $("browseList").innerHTML = html || '<div class="empty">没有匹配的单词</div>';
   }
+  // ---------- 错题本 视图 ----------
+  function startWrong() { show("wrong"); renderWrong(); }
+  function renderWrong() {
+    var ws = wrongWords();
+    $("wrongCount").textContent = "共 " + ws.length + " 个错词";
+    $("wrongReview").style.display = ws.length ? "" : "none";
+    $("wrongClear").style.display = ws.length ? "" : "none";
+    $("wrongListBox").innerHTML = ws.length ? ws.map(function (x) {
+      var w = x.e;
+      return '<div class="row" data-w="' + esc(w.word) + '"><div><div class="rw">' + esc(w.word) +
+        '</div><div class="rr">' + esc(w.reading || "") + " · " + esc(w.category || "") +
+        '</div></div><button class="rm-btn" data-rm="' + esc(w.word) + '" title="移除">✕</button></div>';
+    }).join("") : '<div class="empty">还没有错题。<br>测验答错、或闪卡标记“不认识”的词会自动收进这里。</div>';
+  }
+  function startWrongReview() {
+    var list = wrongWords().map(function (x) { return x.e; });
+    if (!list.length) { alert("错题本是空的"); return; }
+    fc = { list: shuffle(list), i: 0, flipped: false, known: 0, unknown: 0, review: false, wrong: true };
+    show("flash");
+    $("title").textContent = "复习错题";
+    renderFlash();
+  }
+
   function openDetail(word) {
     var w = (state.books[state.book] || []).find(function (x) { return x.word === word; });
     if (!w) return;
@@ -589,6 +629,7 @@
         else if (m === "quiz") startQuiz();
         else if (m === "review") startFlash(true);
         else if (m === "browse") startBrowse();
+        else if (m === "wrong") startWrong();
       };
     });
 
@@ -634,6 +675,19 @@
     };
     $("quizNext").onclick = quizNext;
     $("quizPrompt").onclick = function (e) { if (!handleSpeakClick(e)) handleFbClick(e); };  // 题目区🔊/报错
+
+    // 错题本
+    $("wrongReview").onclick = startWrongReview;
+    $("wrongClear").onclick = function () {
+      if (!wrongWords().length) return;
+      if (confirm("确定清空当前词库的错题本？")) { wrong[state.book] = {}; saveWrong(); renderWrong(); }
+    };
+    $("wrongListBox").onclick = function (e) {
+      var rm = e.target.closest(".rm-btn");
+      if (rm) { wrongRemove(rm.getAttribute("data-rm")); renderWrong(); return; }
+      var r = e.target.closest(".row");
+      if (r) openDetail(r.dataset.w);
+    };
 
     // 浏览
     $("searchInput").oninput = function () { renderBrowse(this.value); };

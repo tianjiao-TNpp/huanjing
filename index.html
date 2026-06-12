@@ -59,6 +59,11 @@
           <span class="mode-name">浏览词表</span>
           <span class="mode-sub">按分类/研究方向查看</span>
         </button>
+        <button class="mode-card" data-mode="wrong">
+          <span class="mode-ico">❌</span>
+          <span class="mode-name">错题本</span>
+          <span class="mode-sub" id="wrongSub">收集答错的词</span>
+        </button>
       </div>
 
       <section class="filter-box">
@@ -106,6 +111,18 @@
       <div class="quiz-q" id="quizPrompt"></div>
       <div class="quiz-options" id="quizOptions"></div>
       <button class="big-btn good wide hidden" id="quizNext">下一题 ›</button>
+    </main>
+
+    <!-- 错题本 -->
+    <main id="view-wrong" class="view hidden">
+      <div class="wrong-top">
+        <div class="wrong-count" id="wrongCount"></div>
+        <div class="wrong-bar">
+          <button class="big-btn good" id="wrongReview">🔁 复习错题</button>
+          <button class="link-btn" id="wrongClear">清空</button>
+        </div>
+      </div>
+      <div id="wrongListBox" class="browse-list"></div>
     </main>
 
     <!-- 浏览 -->
